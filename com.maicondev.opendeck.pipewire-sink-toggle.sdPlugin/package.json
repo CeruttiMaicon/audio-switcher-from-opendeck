@@ -1,0 +1,23 @@
+{
+	"name": "com.maicondev.opendeck.pipewire-sink-toggle.sdplugin",
+	"version": "1.0.0",
+	"private": true,
+	"description": "OpenDeck: Toggle Audio Devices PipeWire com wpctl",
+	"type": "module",
+	"scripts": {
+		"build:js": "esbuild src/index.ts --bundle --outfile=bin/plugin.js --platform=node --target=node20 --format=esm --packages=bundle --external:ws --log-level=warning",
+		"build": "npm run build:js && bash scripts/pack.sh"
+	},
+	"keywords": ["opendeck", "streamdeck", "pipewire", "wpctl"],
+	"author": "maicon-dev",
+	"license": "MIT",
+	"dependencies": {
+		"@elgato/streamdeck": "^2.0.4",
+		"ws": "^8.19.0"
+	},
+	"devDependencies": {
+		"@types/node": "^25.6.0",
+		"esbuild": "^0.28.0",
+		"typescript": "^6.0.2"
+	}
+}
