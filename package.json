@@ -1,0 +1,9 @@
+{
+	"name": "audio-switcher-opendeck",
+	"private": true,
+	"type": "module",
+	"description": "OpenDeck / Stream Deck plugin — PipeWire audio sink toggle (Linux)",
+	"scripts": {
+		"build": "node build.js"
+	}
+}

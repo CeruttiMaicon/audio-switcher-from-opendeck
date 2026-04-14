@@ -8,32 +8,38 @@ Plugin no formato **Stream Deck / OpenDeck** (pasta `.sdPlugin`) que alterna o *
 - **Node.js 20+** instalado no sistema (o OpenDeck executa o plugin com o `node` do host).
 - **`wpctl`** disponível no `PATH` (normalmente via **WirePlumber**).
 
-## Instalação
+## Build e instalação
 
-1. Na pasta do plugin, instale dependências e faça o build (inclui o pacote para o OpenDeck):
+1. **Dependências do plugin** (uma vez, na pasta `audio-switcher.sdPlugin`):
 
    ```bash
-   cd com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin
+   cd audio-switcher.sdPlugin
    npm install
+   cd ..
+   ```
+
+2. **Pacote de release** (na **raiz** do repositório): lê a versão em `audio-switcher.sdPlugin/manifest.json`, compila o JS e gera um ZIP em `dist/`:
+
+   ```bash
    npm run build
    ```
 
-   Isto gera `bin/plugin.js` e, na **raiz deste repositório**, o ficheiro **`pipewire-sink-toggle.streamDeckPlugin`** (ZIP com a pasta `.sdPlugin` por dentro, sem `node_modules`). É preciso ter o comando **`zip`** no sistema (`sudo apt install zip` no Ubuntu).
+   Saída: `dist/audio-switcher-opendeck-linux-v<Version>.sdPlugin.zip` (por exemplo `dist/audio-switcher-opendeck-linux-v1.1.0.sdPlugin.zip`). O arquivo contém **`audio-switcher.sdPlugin/`** na raiz, só com ficheiros necessários em runtime (`manifest.json`, `bin/plugin.js`, `node_modules/ws`, `propertyInspector/`, `imgs/`).
 
-   Só para recompilar o JavaScript sem recriar o arquivo: `npm run build:js`.
+   Requisitos: **`zip`** no PATH (`sudo apt install zip` no Ubuntu). Só para recompilar o JavaScript: `cd audio-switcher.sdPlugin && npm run build:js`.
 
-2. Instale no OpenDeck de uma destas formas:
+3. Instale no OpenDeck de uma destas formas:
 
    **A) Pelo OpenDeck (ficheiro local / ZIP)**  
-   Em versões recentes do OpenDeck existe a opção de **instalar plugin a partir de um ficheiro local** (menu de plugins / loja — algo como “instalar de ficheiro” ou “sideload”). Use o ficheiro **`pipewire-sink-toggle.streamDeckPlugin`** gerado no passo anterior (é o mesmo formato que um ZIP Elgato).
+   Instale o ficheiro **`dist/audio-switcher-opendeck-linux-v….sdPlugin.zip`** (é um ZIP compatível com instalação de plugin OpenDeck / Stream Deck).
 
    **B) Copiar a pasta manualmente**  
-   Copie a pasta completa **`com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin`** para:
+   Copie a pasta completa **`audio-switcher.sdPlugin`** (a de desenvolvimento ou extraída do ZIP) para:
 
    - Nativo: `~/.config/opendeck/plugins/`
    - Flatpak: `~/.var/app/me.amankhanna.opendeck/config/opendeck/plugins/` (o prefixo pode variar com a id da app).
 
-3. **Reinicie o OpenDeck** (ou recarregue os plugins, se a sua versão tiver essa opção).
+4. **Reinicie o OpenDeck** (ou recarregue os plugins, se a sua versão tiver essa opção).
 
 ## Configuração
 
@@ -47,9 +53,10 @@ O plugin escreve para **stdout** (mensagens com o prefixo `[pipewire-sink-toggle
 
 ## Estrutura
 
-- [`com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin/manifest.json`](com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin/manifest.json) — metadados, Node 20, só Linux, dois estados, Property Inspector.
-- [`com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin/src/`](com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin/src/) — código TypeScript (`wpctl`, ação).
-- [`com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin/propertyInspector/`](com.maicondev.opendeck.pipewire-sink-toggle.sdPlugin/propertyInspector/) — UI das definições.
+- [`build.js`](build.js) — empacota o release para `dist/*.sdPlugin.zip`.
+- [`audio-switcher.sdPlugin/manifest.json`](audio-switcher.sdPlugin/manifest.json) — metadados, Node 20, só Linux, dois estados, Property Inspector.
+- [`audio-switcher.sdPlugin/src/`](audio-switcher.sdPlugin/src/) — código TypeScript (PipeWire / `wpctl`, ação).
+- [`audio-switcher.sdPlugin/propertyInspector/`](audio-switcher.sdPlugin/propertyInspector/) — UI das definições.
 
 ## Licença
 
