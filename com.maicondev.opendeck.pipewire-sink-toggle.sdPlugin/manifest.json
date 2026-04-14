@@ -1,6 +1,6 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
-	"Name": "PipeWire Sink Toggle",
+	"Name": "Audio Switcher Linux (PipeWire)",
 	"Version": "1.0.0",
 	"Author": "maicon-dev",
 	"UUID": "com.maicondev.opendeck.pipewire-sink-toggle",
