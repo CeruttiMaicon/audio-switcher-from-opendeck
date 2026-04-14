@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="pt">
+	<head>
+		<meta charset="utf-8" />
+		<title>Toggle Audio Devices · PipeWire</title>
+		<style>
+			:root {
+				color-scheme: dark;
+				--bg: #1e1e1e;
+				--surface: #2d2d2d;
+				--border: #404040;
+				--text: #ececec;
+				--muted: #9a9a9a;
+				--accent: #3b82f6;
+				--accent-hover: #2563eb;
+				--danger: #f87171;
+				--radius: 6px;
+				--font: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				padding: 12px;
+				font-family: var(--font);
+				font-size: 12px;
+				line-height: 1.35;
+				background: var(--bg);
+				color: var(--text);
+			}
+			.pi-header {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				margin-bottom: 14px;
+				padding-bottom: 10px;
+				border-bottom: 1px solid var(--border);
+			}
+			.pi-header img {
+				width: 28px;
+				height: 28px;
+				border-radius: 4px;
+				object-fit: contain;
+			}
+			.pi-header h1 {
+				margin: 0;
+				font-size: 13px;
+				font-weight: 600;
+				letter-spacing: 0.02em;
+			}
+			.pi-header p {
+				margin: 2px 0 0;
+				font-size: 11px;
+				color: var(--muted);
+				font-weight: 400;
+			}
+			label {
+				display: block;
+				margin-top: 12px;
+				margin-bottom: 4px;
+				font-weight: 600;
+				font-size: 11px;
+				color: var(--muted);
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+			}
+			select {
+				width: 100%;
+				padding: 8px 10px;
+				border-radius: var(--radius);
+				border: 1px solid var(--border);
+				background: var(--surface);
+				color: var(--text);
+				font-family: var(--font);
+				font-size: 12px;
+				cursor: pointer;
+				outline: none;
+			}
+			select:focus {
+				border-color: var(--accent);
+				box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+			}
+			.hint {
+				margin-top: 4px;
+				font-size: 10px;
+				color: var(--muted);
+			}
+			#status {
+				margin-top: 10px;
+				padding: 8px 10px;
+				border-radius: var(--radius);
+				font-size: 11px;
+				display: none;
+			}
+			#status.is-error {
+				display: block;
+				background: rgba(248, 113, 113, 0.12);
+				color: var(--danger);
+				border: 1px solid rgba(248, 113, 113, 0.35);
+			}
+			#status.is-ok {
+				display: block;
+				background: rgba(59, 130, 246, 0.12);
+				color: #93c5fd;
+				border: 1px solid rgba(59, 130, 246, 0.35);
+			}
+			.actions {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px;
+				margin-top: 16px;
+			}
+			button {
+				flex: 1;
+				min-width: 100px;
+				padding: 8px 12px;
+				border-radius: var(--radius);
+				border: 1px solid var(--border);
+				background: var(--surface);
+				color: var(--text);
+				font-family: var(--font);
+				font-size: 11px;
+				font-weight: 600;
+				cursor: pointer;
+			}
+			button:hover {
+				background: #383838;
+			}
+			button.primary {
+				background: var(--accent);
+				border-color: var(--accent);
+				color: #fff;
+			}
+			button.primary:hover {
+				background: var(--accent-hover);
+				border-color: var(--accent-hover);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="pi-header">
+			<img src="../imgs/icone.png" alt="" width="28" height="28" />
+			<div>
+				<h1>Alternar saída de áudio</h1>
+				<p>Escolha dois dispositivos listados pelo PipeWire</p>
+			</div>
+		</div>
+
+		<div id="status" role="status"></div>
+
+		<label for="primary">Saída primária</label>
+		<select id="primary" aria-describedby="hint-p"></select>
+		<p id="hint-p" class="hint">Primeiro dispositivo do alternador</p>
+
+		<label for="secondary">Saída secundária</label>
+		<select id="secondary" aria-describedby="hint-s"></select>
+		<p id="hint-s" class="hint">Segundo dispositivo do alternador</p>
+
+		<div class="actions">
+			<button type="button" id="reload" class="primary">Atualizar lista</button>
+			<button type="button" id="save">Guardar</button>
+		</div>
+
+		<script src="pi.js"></script>
+	</body>
+</html>
