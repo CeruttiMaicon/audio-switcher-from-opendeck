@@ -2,3 +2,7 @@ audio-switcher.sdPlugin/node_modules/
 audio-switcher.sdPlugin/bin/plugin.js
 dist/
 *.sdPlugin.zip
+
+# Legado (antigo pack.sh na raiz) — não usar; o release é dist/audio-switcher-opendeck-linux-v*.sdPlugin.zip
+pipewire-sink-toggle.streamDeckPlugin
+pipewire-sink-toggle.streamDeckPlugin.zip

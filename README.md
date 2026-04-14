@@ -33,6 +33,8 @@ Gera:
 - `dist/audio-switcher-opendeck-linux-v<Version>.sdPlugin.zip`  
   (a `<Version>` vem de `audio-switcher.sdPlugin/manifest.json` → campo **`Version`**).
 
+**GitHub Releases / assets:** anexa **só** este ficheiro em `dist/` (nome inclui a versão). Ficheiros antigos na raiz como `pipewire-sink-toggle.streamDeckPlugin` ou `.zip` **não** são produzidos pelo build actual — se existirem, são lixo legado e mostram versão errada.
+
 Só JavaScript (sem ZIP):
 
 ```bash
