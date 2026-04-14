@@ -1,12 +1,12 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
-	"Name": "Audio Switcher Linux (PipeWire)",
-	"Version": "1.2.0",
+	"Name": "Audio Switcher (PipeWire)",
+	"Version": "1.3.0",
 	"Author": "maicon-dev",
 	"UUID": "com.maicondev.opendeck.pipewire-sink-toggle",
-	"Description": "Alterna o sink de áudio predefinido entre dois dispositivos (wpctl / PipeWire). Apenas Linux.",
+	"Description": "Switches the default PipeWire audio sink between two selected output devices. Native Linux plugin (WirePlumber/wpctl), no Wine required.",
 	"Icon": "imgs/icone",
-	"Category": "Audio Linux",
+	"Category": "Audio",
 	"CategoryIcon": "imgs/icone",
 	"CodePath": "bin/plugin.js",
 	"OS": [
@@ -23,10 +23,10 @@
 	},
 	"Actions": [
 		{
-			"Name": "Toggle Audio Devices",
+			"Name": "Toggle Audio Output",
 			"UUID": "com.maicondev.opendeck.pipewire-sink-toggle.toggle",
 			"Icon": "imgs/icone",
-			"Tooltip": "Alterna entre dois outputs de áudio (wpctl)",
+			"Tooltip": "Toggle the default PipeWire sink between two outputs configured in the property inspector.",
 			"PropertyInspectorPath": "propertyInspector/index.html",
 			"Controllers": ["Keypad"],
 			"DisableAutomaticStates": true,

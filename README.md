@@ -1,63 +1,129 @@
-# PipeWire Sink Toggle (OpenDeck)
+# Audio Switcher Linux (PipeWire) · OpenDeck
 
-Plugin no formato **Stream Deck / OpenDeck** (pasta `.sdPlugin`) que alterna o **sink de áudio predefinido** entre dois dispositivos, usando apenas **`wpctl`** (PipeWire / WirePlumber) em **Linux**.
+Plugin **nativo Linux** (Node.js + Stream Deck SDK) que alterna o **sink de áudio predefinido** do **PipeWire** entre duas saídas que escolheres. Usa **WirePlumber** (`wpctl`, `pw-dump`) — **sem Wine**, sem binários Windows.
+
+![Ícone do plugin](audio-switcher.sdPlugin/imgs/icone.png)
+
+*(Para listagem pública: adiciona uma captura real do OpenDeck em [`docs/STORE.md`](docs/STORE.md).)*
+
+---
 
 ## Requisitos
 
-- **OpenDeck** (recomendado: pacote nativo `.deb`/`.rpm` se precisar de acesso fiável ao PipeWire do sistema; em Flatpak o `wpctl` pode estar limitado pelo sandbox).
-- **Node.js 20+** instalado no sistema (o OpenDeck executa o plugin com o `node` do host).
-- **`wpctl`** disponível no `PATH` (normalmente via **WirePlumber**).
+| Requisito | Notas |
+|-----------|--------|
+| **OpenDeck** | Pacote **nativo** (`.deb` / `.rpm`) recomendado para `wpctl`/`pw-dump` no PATH. Em **Flatpak** o sandbox pode bloquear estes comandos. |
+| **Node.js 20+** | O OpenDeck executa `bin/plugin.js` com o `node` do sistema. |
+| **PipeWire / WirePlumber** | `wpctl` e idealmente `pw-dump` disponíveis no PATH. |
+| **`zip`** | Só para `npm run build` (`sudo apt install zip` no Ubuntu). |
 
-## Build e instalação
+---
 
-1. **Dependências do plugin** (uma vez, na pasta `audio-switcher.sdPlugin`):
+## Build do pacote de release
 
-   ```bash
-   cd audio-switcher.sdPlugin
-   npm install
-   cd ..
-   ```
+Na **raiz** do repositório:
 
-2. **Pacote de release** (na **raiz** do repositório): lê a versão em `audio-switcher.sdPlugin/manifest.json`, compila o JS e gera um ZIP em `dist/`:
+```bash
+cd audio-switcher.sdPlugin && npm install && cd ..
+npm run build
+```
 
-   ```bash
-   npm run build
-   ```
+Gera:
 
-   Saída: `dist/audio-switcher-opendeck-linux-v<Version>.sdPlugin.zip` (por exemplo `dist/audio-switcher-opendeck-linux-v1.1.0.sdPlugin.zip`). O arquivo contém **`audio-switcher.sdPlugin/`** na raiz, só com ficheiros necessários em runtime (`manifest.json`, `bin/plugin.js`, `node_modules/ws`, `propertyInspector/`, `imgs/`).
+- `dist/audio-switcher-opendeck-linux-v<Version>.sdPlugin.zip`  
+  (a `<Version>` vem de `audio-switcher.sdPlugin/manifest.json` → campo **`Version`**).
 
-   Requisitos: **`zip`** no PATH (`sudo apt install zip` no Ubuntu). Só para recompilar o JavaScript: `cd audio-switcher.sdPlugin && npm run build:js`.
+**GitHub Releases / assets:** anexa **só** este ficheiro em `dist/` (nome inclui a versão). Ficheiros antigos na raiz como `pipewire-sink-toggle.streamDeckPlugin` ou `.zip` **não** são produzidos pelo build actual — se existirem, são lixo legado e mostram versão errada.
 
-3. Instale no OpenDeck de uma destas formas:
+Só JavaScript (sem ZIP):
 
-   **A) Pelo OpenDeck (ficheiro local / ZIP)**  
-   Instale o ficheiro **`dist/audio-switcher-opendeck-linux-v….sdPlugin.zip`** (é um ZIP compatível com instalação de plugin OpenDeck / Stream Deck).
+```bash
+cd audio-switcher.sdPlugin && npm run build:js
+```
 
-   **B) Copiar a pasta manualmente**  
-   Copie a pasta completa **`audio-switcher.sdPlugin`** (a de desenvolvimento ou extraída do ZIP) para:
+### Validar o ZIP (estrutura OpenDeck)
 
-   - Nativo: `~/.config/opendeck/plugins/`
-   - Flatpak: `~/.var/app/me.amankhanna.opendeck/config/opendeck/plugins/` (o prefixo pode variar com a id da app).
+O `npm run build` **já valida** automaticamente o arquivo gerado. Para rever um ZIP existente:
 
-4. **Reinicie o OpenDeck** (ou recarregue os plugins, se a sua versão tiver essa opção).
+```bash
+npm run verify
+```
 
-## Configuração
+**Validação manual** (o que revistas de código costumam pedir):
 
-1. Arraste a ação **«Toggle Audio Devices»** para um botão.
-2. No painel de propriedades, escolha **Saída primária** e **Saída secundária** nas listas (preenchidas a partir do PipeWire). O sink predefinido aparece marcado como **· predefinido**. **Atualizar lista** volta a pedir os dispositivos; **Guardar** confirma. A alteração das listas também grava automaticamente após um breve atraso.
-3. O plugin guarda o **nome completo** do sink; na tecla, a resolução faz correspondência **exacta** (ignorando maiúsculas) e, se necessário, **parcial** — perfis antigos com fragmentos de texto continuam a funcionar.
+```bash
+cd dist
+unzip -l audio-switcher-opendeck-linux-v1.2.0.sdPlugin.zip | head -20
+```
+
+Na listagem, a **primeira pasta** tem de ser **`audio-switcher.sdPlugin/`** — não `dist/...`, nem `audio-switcher.sdPlugin/audio-switcher.sdPlugin/`.
+
+Depois de extrair:
+
+```bash
+unzip -q audio-switcher-opendeck-linux-v1.2.0.sdPlugin.zip -d /tmp/test-plugin
+ls /tmp/test-plugin
+# Tem de aparecer só: audio-switcher.sdPlugin
+```
+
+---
+
+## Instalação no OpenDeck (passo a passo)
+
+1. **Remove** versões antigas do mesmo plugin (mesmo UUID) em Definições → Plugins, se existirem.
+2. **Instala** o ficheiro `dist/audio-switcher-opendeck-linux-v….sdPlugin.zip` pela opção de instalar plugin a partir de ficheiro (conforme a tua versão do OpenDeck).
+3. **Reinicia** o OpenDeck (ou recarrega plugins).
+4. Arrasta a ação **«Toggle audio output»** para um botão.
+5. No painel de propriedades: escolhe **Saída primária** e **Saída secundária**, **Guardar** (ou espera o guardado automático ao mudar as listas).
+6. Clica na tecla: o sink predefinido deve alternar e o **ícone** deve refletir o estado (dois estados no manifest).
+
+**Cópia manual da pasta** (alternativa ao ZIP): extrai o ZIP e copia `audio-switcher.sdPlugin` para:
+
+- Nativo: `~/.config/opendeck/plugins/`
+- Flatpak: algo como `~/.var/app/…/config/opendeck/plugins/` (varia com o ID da app).
+
+---
+
+## Manifest (identidade no OpenDeck)
+
+| Campo | Valor actual | Nota |
+|--------|----------------|------|
+| **UUID** do plugin | `com.maicondev.opendeck.pipewire-sink-toggle` | Não mudar após utilizadores instalarem — quebra perfis. |
+| **UUID** da acção | `…pipewire-sink-toggle.toggle` | Idem. |
+| **Name** / **Description** | Texto curto para lista e detalhe | Ajustáveis para marketing; UUID mantém-se. |
+
+---
+
+## Configuração rápida
+
+- **Atualizar lista** — volta a pedir dispositivos ao PipeWire.
+- **Guardar** — confirma definições (há também guardado automático ao alterar os `<select>`).
+- Correspondência de nomes: **exacta** (ignorando maiúsculas) e, se preciso, **parcial** no nome do sink.
+
+---
 
 ## Logs
 
-O plugin escreve para **stdout** (mensagens com o prefixo `[pipewire-sink-toggle]`). O OpenDeck costuma guardar logs do processo; em Linux também pode haver ficheiros em `~/.local/share/opendeck/logs/`.
+Prefixo nos logs: `[pipewire-sink-toggle]`. Em Linux: `~/.local/share/opendeck/logs/` (ou equivalente da tua instalação).
 
-## Estrutura
+---
 
-- [`build.js`](build.js) — empacota o release para `dist/*.sdPlugin.zip`.
-- [`audio-switcher.sdPlugin/manifest.json`](audio-switcher.sdPlugin/manifest.json) — metadados, Node 20, só Linux, dois estados, Property Inspector.
-- [`audio-switcher.sdPlugin/src/`](audio-switcher.sdPlugin/src/) — código TypeScript (PipeWire / `wpctl`, ação).
-- [`audio-switcher.sdPlugin/propertyInspector/`](audio-switcher.sdPlugin/propertyInspector/) — UI das definições.
+## Checklist “pronto para distribuir”
+
+- [ ] `manifest.json` com **Version** correcta para o release.
+- [ ] `npm run build` sem erros e mensagem **`validação OK`**.
+- [ ] `npm run verify` passa no ZIP que vais publicar.
+- [ ] Teste **instalação limpa**: remover plugin antigo → instalar ZIP novo → tecla + troca de dispositivo + ícone.
+- [ ] (Opcional) Captura ou GIF para README / loja — ver [`docs/STORE.md`](docs/STORE.md).
+
+---
+
+## Estrutura do repositório
+
+- [`build.js`](build.js) — build + validação da estrutura do ZIP.
+- [`audio-switcher.sdPlugin/manifest.json`](audio-switcher.sdPlugin/manifest.json) — metadados oficiais do plugin.
+- [`audio-switcher.sdPlugin/src/`](audio-switcher.sdPlugin/src/) — código TypeScript.
 
 ## Licença
 
-MIT (veja o `package.json` do plugin).
+MIT (ver `audio-switcher.sdPlugin/package.json`).
