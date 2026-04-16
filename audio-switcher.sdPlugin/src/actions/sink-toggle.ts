@@ -211,7 +211,7 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 				event: "sinksList",
 				sinks: [],
 				error:
-					"Não foi possível listar saídas de áudio. Instale PipeWire (pacote pipewire; comandos pw-dump e wpctl no PATH) e reinicie o OpenDeck.",
+					"Could not list audio outputs. Install PipeWire (pipewire package; pw-dump and wpctl on PATH) and restart OpenDeck.",
 			});
 			return;
 		}

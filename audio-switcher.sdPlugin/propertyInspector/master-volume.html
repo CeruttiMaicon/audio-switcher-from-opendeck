@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1" />
+		<title>Master Volume</title>
+		<style>
+			:root {
+				--bg: #1e1e1e;
+				--surface: #2a2a2a;
+				--border: #3f3f3f;
+				--text: #f4f4f5;
+				--muted: #a1a1aa;
+				--accent: #6366f1;
+				--radius: 10px;
+				--font: system-ui, -apple-system, "Segoe UI", sans-serif;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				padding: 14px 12px 18px;
+				background: var(--bg);
+				color: var(--text);
+				font-family: var(--font);
+				font-size: 12px;
+			}
+			.header {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				margin-bottom: 18px;
+			}
+			.header img {
+				width: 28px;
+				height: 28px;
+				border-radius: 8px;
+			}
+			.header h1 {
+				margin: 0;
+				font-size: 14px;
+				font-weight: 650;
+				letter-spacing: -0.02em;
+			}
+			.header p {
+				margin: 2px 0 0;
+				font-size: 11px;
+				color: var(--muted);
+				line-height: 1.35;
+			}
+			.card {
+				background: var(--surface);
+				border: 1px solid var(--border);
+				border-radius: var(--radius);
+				padding: 14px 14px 12px;
+			}
+			.card h2 {
+				margin: 0 0 4px;
+				font-size: 12px;
+				font-weight: 650;
+			}
+			.card .sub {
+				margin: 0 0 14px;
+				font-size: 11px;
+				color: var(--muted);
+			}
+			.row {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+			}
+			input[type="range"] {
+				flex: 1;
+				height: 6px;
+				-webkit-appearance: none;
+				appearance: none;
+				background: linear-gradient(
+					to right,
+					var(--accent) 0%,
+					var(--accent) var(--fill, 20%),
+					#3f3f46 var(--fill, 20%),
+					#3f3f46 100%
+				);
+				border-radius: 999px;
+				outline: none;
+			}
+			input[type="range"]::-webkit-slider-thumb {
+				-webkit-appearance: none;
+				appearance: none;
+				width: 16px;
+				height: 16px;
+				border-radius: 50%;
+				background: #fafafa;
+				border: 2px solid #18181b;
+				box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+				cursor: pointer;
+			}
+			input[type="range"]::-moz-range-thumb {
+				width: 16px;
+				height: 16px;
+				border-radius: 50%;
+				background: #fafafa;
+				border: 2px solid #18181b;
+				box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+				cursor: pointer;
+			}
+			.value {
+				min-width: 40px;
+				text-align: right;
+				font-variant-numeric: tabular-nums;
+				font-size: 12px;
+				color: #e4e4e7;
+				font-weight: 600;
+			}
+			.hint {
+				margin: 12px 0 0;
+				font-size: 10px;
+				color: var(--muted);
+				line-height: 1.45;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="header">
+			<img src="../imgs/icone.png" alt="" width="28" height="28" />
+			<div>
+				<h1>Master Volume</h1>
+				<p>Default PipeWire output volume. Updates when the default sink changes.</p>
+			</div>
+		</div>
+
+		<div class="card">
+			<h2>Volume step</h2>
+			<p class="sub">How much the level changes per detent when you turn the control.</p>
+			<div class="row">
+				<input type="range" id="step" min="1" max="25" value="5" aria-valuemin="1" aria-valuemax="25" />
+				<span class="value" id="stepLabel">5%</span>
+			</div>
+			<p class="hint">Range 1%–25%. The key shows total level; when muted, the ring turns amber and a MUTED label appears.</p>
+		</div>
+
+		<script src="master-volume-pi.js"></script>
+	</body>
+</html>

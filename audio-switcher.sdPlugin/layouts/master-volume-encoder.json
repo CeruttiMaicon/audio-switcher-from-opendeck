@@ -1,0 +1,25 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/layout@0.4.15",
+	"id": "com.maicondev.opendeck.master-volume.encoder",
+	"items": [
+		{
+			"type": "pixmap",
+			"key": "face",
+			"rect": [0, 0, 200, 100],
+			"zOrder": 1
+		},
+		{
+			"type": "text",
+			"key": "pct",
+			"rect": [20, 28, 160, 44],
+			"zOrder": 10,
+			"alignment": "center",
+			"color": "#f8fafc",
+			"font": {
+				"size": 30,
+				"weight": 800
+			},
+			"value": ""
+		}
+	]
+}
