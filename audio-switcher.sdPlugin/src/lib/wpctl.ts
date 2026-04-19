@@ -271,3 +271,154 @@ export async function setDefaultSink(id: number): Promise<boolean> {
 		return false;
 	}
 }
+
+export type DefaultSinkVolume = {
+	/** 0..1 */
+	fraction: number;
+	muted: boolean;
+};
+
+/**
+ * Lê volume do sink predefinido (`wpctl get-volume @DEFAULT_AUDIO_SINK@`).
+ */
+export async function getDefaultSinkVolume(): Promise<DefaultSinkVolume | null> {
+	try {
+		const { stdout, stderr } = await execFileAsync("wpctl", ["get-volume", "@DEFAULT_AUDIO_SINK@"], {
+			encoding: "utf8",
+			maxBuffer: 256 * 1024,
+			env: childEnv(),
+		});
+		if (stderr?.trim()) {
+			console.log("[pipewire-sink-toggle] wpctl get-volume stderr:", stderr.trim());
+		}
+		const line = stdout.trim();
+		const m = line.match(/Volume:\s*([\d.]+)/i);
+		if (!m) {
+			console.error("[pipewire-sink-toggle] wpctl get-volume: formato inesperado:", JSON.stringify(line));
+			return null;
+		}
+		const fraction = Number(m[1]);
+		if (!Number.isFinite(fraction)) {
+			return null;
+		}
+		const muted = /\[\s*MUTED\s*\]/i.test(line);
+		return { fraction: Math.min(1, Math.max(0, fraction)), muted };
+	} catch (e: unknown) {
+		const err = e as NodeJS.ErrnoException & { stderr?: string };
+		console.error("[pipewire-sink-toggle] wpctl get-volume falhou:", err.message);
+		if (err.stderr) {
+			console.error("[pipewire-sink-toggle] stderr:", String(err.stderr).trim());
+		}
+		return null;
+	}
+}
+
+/**
+ * Ajusta o volume do sink predefinido em pontos percentuais (ex.: +15 ou -5), via `wpctl set-volume … N%+` / `N%-`.
+ */
+export async function adjustDefaultSinkVolumePercent(signedPercent: number): Promise<boolean> {
+	const n = Math.round(Math.abs(signedPercent));
+	if (n <= 0) {
+		return true;
+	}
+	const sign = signedPercent > 0 ? "+" : "-";
+	const spec = `${n}%${sign}`;
+	try {
+		const { stderr } = await execFileAsync("wpctl", ["set-volume", "@DEFAULT_AUDIO_SINK@", spec], {
+			encoding: "utf8",
+			env: childEnv(),
+		});
+		if (stderr?.trim()) {
+			console.log("[pipewire-sink-toggle] wpctl set-volume stderr:", stderr.trim());
+		}
+		/* Não invalidar cache aqui: durante rajadas de rotação isso forçava `get-volume` em cascata
+		 * (poll + resync) e deixava tudo pesado. O plugin usa `shadowLiveVolume` + resync explícito. */
+		return true;
+	} catch (e: unknown) {
+		const err = e as NodeJS.ErrnoException & { stderr?: string };
+		console.error("[pipewire-sink-toggle] wpctl set-volume falhou:", err.message, spec);
+		if (err.stderr) {
+			console.error("[pipewire-sink-toggle] stderr:", String(err.stderr).trim());
+		}
+		return false;
+	}
+}
+
+/**
+ * Define volume absoluto 0–100% (`wpctl set-volume … 0.65` — 1.0 = 100%).
+ * Um único processo por destino, em vez de vários passos relativos.
+ */
+export async function setDefaultSinkVolumePercentAbsolute(percent0to100: number): Promise<boolean> {
+	const p = Math.min(100, Math.max(0, Math.round(percent0to100)));
+	const frac = p / 100;
+	try {
+		const { stderr } = await execFileAsync("wpctl", ["set-volume", "@DEFAULT_AUDIO_SINK@", String(frac)], {
+			encoding: "utf8",
+			env: childEnv(),
+		});
+		if (stderr?.trim()) {
+			console.log("[pipewire-sink-toggle] wpctl set-volume (absolute) stderr:", stderr.trim());
+		}
+		return true;
+	} catch (e: unknown) {
+		const err = e as NodeJS.ErrnoException & { stderr?: string };
+		console.error("[pipewire-sink-toggle] wpctl set-volume (absolute) falhou:", err.message, frac);
+		if (err.stderr) {
+			console.error("[pipewire-sink-toggle] stderr:", String(err.stderr).trim());
+		}
+		return false;
+	}
+}
+
+/** Short-lived cache + single in-flight read to avoid wpctl storms during dial spins + polling. */
+let defaultSinkVolumeCache: { value: DefaultSinkVolume; at: number } | null = null;
+let defaultSinkVolumeInFlight: Promise<DefaultSinkVolume | null> | null = null;
+const DEFAULT_SINK_VOLUME_CACHE_TTL_MS = 500;
+
+export function invalidateDefaultSinkVolumeCache(): void {
+	defaultSinkVolumeCache = null;
+}
+
+/**
+ * Same as {@link getDefaultSinkVolume} but coalesces overlapping reads (poll + UI) within `DEFAULT_SINK_VOLUME_CACHE_TTL_MS`.
+ */
+export async function getDefaultSinkVolumeCached(): Promise<DefaultSinkVolume | null> {
+	const now = Date.now();
+	if (defaultSinkVolumeCache && now - defaultSinkVolumeCache.at < DEFAULT_SINK_VOLUME_CACHE_TTL_MS) {
+		return defaultSinkVolumeCache.value;
+	}
+	if (!defaultSinkVolumeInFlight) {
+		defaultSinkVolumeInFlight = getDefaultSinkVolume().finally(() => {
+			defaultSinkVolumeInFlight = null;
+		});
+	}
+	const result = await defaultSinkVolumeInFlight;
+	if (result) {
+		defaultSinkVolumeCache = { value: result, at: Date.now() };
+	}
+	return result;
+}
+
+/**
+ * Alterna mute do sink predefinido (`wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle`).
+ */
+export async function toggleDefaultSinkMute(): Promise<boolean> {
+	try {
+		const { stderr } = await execFileAsync("wpctl", ["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"], {
+			encoding: "utf8",
+			env: childEnv(),
+		});
+		if (stderr?.trim()) {
+			console.log("[pipewire-sink-toggle] wpctl set-mute stderr:", stderr.trim());
+		}
+		invalidateDefaultSinkVolumeCache();
+		return true;
+	} catch (e: unknown) {
+		const err = e as NodeJS.ErrnoException & { stderr?: string };
+		console.error("[pipewire-sink-toggle] wpctl set-mute falhou:", err.message);
+		if (err.stderr) {
+			console.error("[pipewire-sink-toggle] stderr:", String(err.stderr).trim());
+		}
+		return false;
+	}
+}

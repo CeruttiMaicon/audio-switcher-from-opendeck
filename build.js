@@ -2,7 +2,7 @@
 /**
  * Gera `dist/audio-switcher-opendeck-linux-v<Version>.sdPlugin.zip` para instalação no OpenDeck.
  * Lê a versão de `audio-switcher.sdPlugin/manifest.json` e empacota apenas ficheiros de runtime
- * (manifest, bin/plugin.js, node_modules/ws, propertyInspector, imgs).
+ * (manifest, bin/plugin.js, node_modules/ws, propertyInspector, imgs, layouts).
  */
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,8 +65,10 @@ function runBuildJs() {
 function stageRelease(stagePluginRoot) {
 	const binSrc = join(PLUGIN_ROOT, "bin", "plugin.js");
 	const wsSrc = join(PLUGIN_ROOT, "node_modules", "ws");
+	const resvgSrc = join(PLUGIN_ROOT, "node_modules", "@resvg");
 	const piSrc = join(PLUGIN_ROOT, "propertyInspector");
 	const imgsSrc = join(PLUGIN_ROOT, "imgs");
+	const layoutsSrc = join(PLUGIN_ROOT, "layouts");
 
 	if (!existsSync(binSrc)) {
 		console.error(`build: falta ${binSrc} — npm run build:js na pasta ${PLUGIN_NAME}`);
@@ -76,8 +78,12 @@ function stageRelease(stagePluginRoot) {
 		console.error(`build: falta ${wsSrc} — execute npm install em ${PLUGIN_NAME}`);
 		process.exit(1);
 	}
-	if (!existsSync(piSrc) || !existsSync(imgsSrc)) {
-		console.error("build: faltam propertyInspector/ ou imgs/");
+	if (!existsSync(resvgSrc)) {
+		console.error(`build: falta ${resvgSrc} — execute npm install em ${PLUGIN_NAME}`);
+		process.exit(1);
+	}
+	if (!existsSync(piSrc) || !existsSync(imgsSrc) || !existsSync(layoutsSrc)) {
+		console.error("build: faltam propertyInspector/, imgs/ ou layouts/");
 		process.exit(1);
 	}
 
@@ -88,7 +94,9 @@ function stageRelease(stagePluginRoot) {
 	copyFileSync(binSrc, join(stagePluginRoot, "bin", "plugin.js"));
 	cpSync(piSrc, join(stagePluginRoot, "propertyInspector"), { recursive: true });
 	cpSync(imgsSrc, join(stagePluginRoot, "imgs"), { recursive: true });
+	cpSync(layoutsSrc, join(stagePluginRoot, "layouts"), { recursive: true });
 	cpSync(wsSrc, join(stagePluginRoot, "node_modules", "ws"), { recursive: true });
+	cpSync(resvgSrc, join(stagePluginRoot, "node_modules", "@resvg"), { recursive: true });
 }
 
 function main() {
