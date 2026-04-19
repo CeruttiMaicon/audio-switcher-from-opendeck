@@ -11,6 +11,7 @@ import {
 	type WillDisappearEvent,
 } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
+import { Resvg } from "@resvg/resvg-js";
 import { buildMasterVolumeSvg, masterVolumePercentLabel } from "../lib/master-volume-svg.js";
 import { sendToPropertyInspector } from "../lib/pi-bridge.js";
 import {
@@ -20,6 +21,18 @@ import {
 	setDefaultSinkVolumePercentAbsolute,
 	toggleDefaultSinkMute,
 } from "../lib/wpctl.js";
+
+/** Converte SVG string → data:image/png;base64 (exigido pelo OpenDeck). */
+function svgToPngDataUrl(svg: string, size: number): string {
+	try {
+		const resvg = new Resvg(svg, { fitTo: { mode: "width", value: size } });
+		const png = resvg.render().asPng();
+		return `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
+	} catch (err: unknown) {
+		console.error("[pipewire-sink-toggle] svgToPngDataUrl falhou:", err);
+		return "";
+	}
+}
 
 export type MasterVolumeSettings = JsonObject & {
 	volumeStepPercent?: number;
@@ -52,38 +65,13 @@ function clampVolumeStep(raw: unknown): number {
 	return Math.min(25, Math.max(1, Math.round(n)));
 }
 
-function svgImagePayload(svg: string): string {
-	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
-
-function buildDialHotStripFace(percent: number, muted: boolean, unknown: boolean): string {
-	const w = 200;
-	const h = 100;
-	if (unknown) {
-		return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect fill="#12151c" width="100%" height="100%"/></svg>`;
-	}
-	const p = Math.min(100, Math.max(0, Math.round(percent)));
-	const barW = Math.round((p / 100) * 176);
-	const fill = muted ? "#fb923c" : "#38bdf8";
-	return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect fill="#12151c" width="100%" height="100%"/><rect x="12" y="44" width="176" height="14" rx="5" fill="#27272a"/><rect x="12" y="44" width="${barW}" height="14" rx="5" fill="${fill}"/></svg>`;
-}
-
-/** Data-URLs pré-geradas: zero `encodeURIComponent` no caminho quente do giro. */
-const DIAL_HOT_FACE_UNKNOWN = svgImagePayload(buildDialHotStripFace(0, false, true));
-const DIAL_HOT_FACE_NORMAL: string[] = Array.from({ length: 101 }, (_, p) =>
-	svgImagePayload(buildDialHotStripFace(p, false, false)),
-);
-const DIAL_HOT_FACE_MUTED: string[] = Array.from({ length: 101 }, (_, p) =>
-	svgImagePayload(buildDialHotStripFace(p, true, false)),
-);
-
 const lastHostFingerprint = new Map<string, string>();
 const shadowLiveVolume = new Map<string, { pct: number; muted: boolean }>();
 
 const dialCachedStep = new Map<string, number>();
 const lastDialAction = new Map<string, Action<MasterVolumeSettings>>();
-const dialWpctlTail = new Map<string, Promise<void>>();
 const dialWpctlApplying = new Set<string>();
+const dialWpctlDirty = new Set<string>();
 
 type VolumePaintHint = {
 	pct: number;
@@ -128,7 +116,6 @@ async function paintMasterVolumeMeter(
 
 	const label = masterVolumePercentLabel(unknown, muted, pct);
 	const pctColor = unknown ? "#a1a1aa" : muted ? "#fdba74" : "#f8fafc";
-	const titleOverlay = unknown ? label : "";
 
 	if (action.isDial() && paintOpts?.dialHot) {
 		const fpHot = `dH:${pct}:${muted ? 1 : 0}:${unknown ? 1 : 0}`;
@@ -136,13 +123,10 @@ async function paintMasterVolumeMeter(
 			return;
 		}
 		lastHostFingerprint.set(action.id, fpHot);
-		const idx = Math.min(100, Math.max(0, Math.round(pct)));
-		const hotFace = unknown ? DIAL_HOT_FACE_UNKNOWN : muted ? DIAL_HOT_FACE_MUTED[idx] : DIAL_HOT_FACE_NORMAL[idx];
 		try {
 			await Promise.all([
-				action.setTitle(titleOverlay),
+				action.setTitle(label),
 				action.setFeedback({
-					face: hotFace,
 					pct: { value: label, color: pctColor },
 				}),
 			]);
@@ -152,52 +136,40 @@ async function paintMasterVolumeMeter(
 		return;
 	}
 
-	const ringSize = action.isDial() ? 80 : 144;
-	const dialLite = action.isDial();
-	const ringSvg = buildMasterVolumeSvg({
-		percent: pct,
-		muted,
-		size: ringSize,
-		unknown,
-		omitCenterText: false,
-		renderLite: dialLite,
-	});
-	const ringPayload = svgImagePayload(ringSvg);
-
 	const fpPrefix = action.isDial() ? "dF:" : "k:";
 	const fingerprint = `${fpPrefix}${pct}:${muted ? 1 : 0}:${unknown ? 1 : 0}`;
-	let stripPayload = "";
-
-	if (action.isDial()) {
-		const stripSvg = buildMasterVolumeSvg({
-			percent: pct,
-			muted,
-			size: 200,
-			height: 100,
-			unknown,
-			omitCenterText: true,
-			renderLite: true,
-		});
-		stripPayload = svgImagePayload(stripSvg);
-	}
-
-	const prevFp = lastHostFingerprint.get(action.id);
-	if (prevFp === fingerprint) {
+	if (lastHostFingerprint.get(action.id) === fingerprint) {
 		return;
 	}
+
 	lastHostFingerprint.set(action.id, fingerprint);
 
+	// Sempre gera o PNG e envia via setImage (funciona para key E encoder no OpenDeck)
+	const svgStr = buildMasterVolumeSvg({
+		percent: pct,
+		muted,
+		unknown,
+		size: 144,
+		renderLite: false,
+	});
+	const pngDataUrl = svgToPngDataUrl(svgStr, 144);
+	if (pngDataUrl) {
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			await (action as any).setImage(pngDataUrl);
+		} catch (err: unknown) {
+			console.error("[pipewire-sink-toggle] master-volume setImage:", err);
+		}
+	}
+
 	if (action.isKey()) {
-		await Promise.all([action.setImage(ringPayload), action.setTitle(titleOverlay)]);
 		return;
 	}
 	if (action.isDial()) {
 		try {
 			await Promise.all([
-				action.setImage(ringPayload),
-				action.setTitle(titleOverlay),
+				action.setTitle(label),
 				action.setFeedback({
-					face: stripPayload,
 					pct: { value: label, color: pctColor },
 				}),
 			]);
@@ -255,18 +227,27 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 	}
 
 	private static enqueueDialWpctl(contextId: string): void {
-		const prev = dialWpctlTail.get(contextId) ?? Promise.resolve();
-		const next = prev
-			.then(() => MasterVolumeAction.applyDialWpctlOnce(contextId))
-			.catch((err: unknown) => {
-				console.error("[pipewire-sink-toggle] master-volume dial wpctl chain:", err);
-			});
-		dialWpctlTail.set(contextId, next);
-		void next.finally(() => {
-			if (dialWpctlTail.get(contextId) === next) {
-				dialWpctlTail.delete(contextId);
-			}
-		});
+		if (dialWpctlApplying.has(contextId)) {
+			// Já está a aplicar — marcar como dirty para reaplicar ao terminar.
+			dialWpctlDirty.add(contextId);
+			return;
+		}
+		void MasterVolumeAction.runDialWpctlLoop(contextId);
+	}
+
+	private static async runDialWpctlLoop(contextId: string): Promise<void> {
+		dialWpctlApplying.add(contextId);
+		try {
+			do {
+				dialWpctlDirty.delete(contextId);
+				await MasterVolumeAction.applyDialWpctlOnce(contextId);
+			} while (dialWpctlDirty.has(contextId));
+		} catch (err: unknown) {
+			console.error("[pipewire-sink-toggle] master-volume dial wpctl loop:", err);
+		} finally {
+			dialWpctlApplying.delete(contextId);
+			dialWpctlDirty.delete(contextId);
+		}
 	}
 
 	private static async applyDialWpctlOnce(contextId: string): Promise<void> {
@@ -275,7 +256,6 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 		if (!action || !sh) {
 			return;
 		}
-		dialWpctlApplying.add(contextId);
 		try {
 			const ok = await setDefaultSinkVolumePercentAbsolute(sh.pct);
 			if (!ok) {
@@ -305,8 +285,6 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 			}
 		} catch (err: unknown) {
 			console.error("[pipewire-sink-toggle] master-volume dial wpctl once:", err);
-		} finally {
-			dialWpctlApplying.delete(contextId);
 		}
 	}
 
@@ -338,7 +316,8 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 		shadowLiveVolume.delete(contextId);
 		dialCachedStep.delete(contextId);
 		lastDialAction.delete(contextId);
-		dialWpctlTail.delete(contextId);
+		dialWpctlApplying.delete(contextId);
+		dialWpctlDirty.delete(contextId);
 	}
 
 	/** Repinta a partir do `shadow` (sem `get-volume`). */

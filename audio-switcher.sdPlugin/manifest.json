@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Audio Switcher (PipeWire)",
-	"Version": "1.6.2",
+	"Version": "1.6.10",
 	"Author": "maicon-dev",
 	"UUID": "com.maicondev.opendeck.pipewire-sink-toggle",
 	"Description": "PipeWire: toggle the default sink between two outputs, and show/adjust the default output volume (wpctl). Native Linux, no Wine.",
@@ -46,11 +46,10 @@
 			"Tooltip": "Default PipeWire output volume. Circular meter; configurable step per detent. Refreshes when the default sink changes.",
 			"PropertyInspectorPath": "propertyInspector/master-volume.html",
 			"Controllers": ["Keypad", "Encoder"],
-			"DisableCaching": true,
 			"UserTitleEnabled": false,
 			"Encoder": {
 				"layout": "layouts/master-volume-encoder.json",
-				"Icon": "imgs/mv-key-blank",
+				"Icon": "imgs/icone",
 				"TriggerDescription": {
 					"Rotate": "Adjust volume",
 					"Push": "Toggle mute",
@@ -59,13 +58,7 @@
 			},
 			"States": [
 				{
-					"Image": "imgs/mv-key-blank",
-					"ShowTitle": true,
-					"Title": "",
-					"TitleAlignment": "middle",
-					"TitleColor": "#f8fafc",
-					"FontSize": 22,
-					"FontStyle": "Bold"
+					"ShowTitle": false
 				}
 			]
 		}
