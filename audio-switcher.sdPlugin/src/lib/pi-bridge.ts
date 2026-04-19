@@ -14,11 +14,11 @@ export async function sendToPropertyInspector(
 	payload: JsonValue,
 ): Promise<void> {
 	if (!context) {
-		console.error("[pipewire-sink-toggle] PI: context vazio — mensagem não enviada");
+		console.error("[pipewire-sink-toggle] PI: empty context — message not sent");
 		return;
 	}
 	if (!action) {
-		console.error("[pipewire-sink-toggle] PI: action (UUID) vazio — mensagem não enviada");
+		console.error("[pipewire-sink-toggle] PI: empty action UUID — message not sent");
 		return;
 	}
 	await connection.send({

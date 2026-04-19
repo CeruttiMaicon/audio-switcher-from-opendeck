@@ -33,13 +33,13 @@
 		}
 		var ph = document.createElement("option");
 		ph.value = "";
-		ph.textContent = "— Escolher dispositivo —";
+		ph.textContent = "— Choose device —";
 		selectEl.appendChild(ph);
 		for (var i = 0; i < sinks.length; i++) {
 			var s = sinks[i];
 			var o = document.createElement("option");
 			o.value = s.name;
-			o.textContent = s.name + (s.isDefault ? "  · predefinido" : "");
+			o.textContent = s.name + (s.isDefault ? "  · default" : "");
 			selectEl.appendChild(o);
 		}
 		var ok = false;
@@ -61,12 +61,12 @@
 			return;
 		}
 		if (!lastSinks.length) {
-			setStatus("error", "Nenhum sink encontrado em wpctl status.");
+			setStatus("error", "No sinks found (wpctl status).");
 			populateSelect(primaryEl, [], "");
 			populateSelect(secondaryEl, [], "");
 			return;
 		}
-		setStatus("ok", lastSinks.length + " dispositivo(s) de saída encontrados.");
+		setStatus("ok", lastSinks.length + " output device(s) found.");
 		var p = primaryEl.value;
 		var q = secondaryEl.value;
 		if (pendingSettings) {
@@ -109,7 +109,7 @@
 		if (!websocket || websocket.readyState !== WebSocket.OPEN) {
 			return;
 		}
-		setStatus("ok", "A pedir lista ao plugin…");
+		setStatus("ok", "Requesting list from plugin…");
 		websocket.send(
 			JSON.stringify({
 				event: "sendToPlugin",
@@ -165,7 +165,7 @@
 
 	document.getElementById("save").addEventListener("click", function () {
 		sendSettings();
-		setStatus("ok", "Definições guardadas.");
+		setStatus("ok", "Settings saved.");
 	});
 	document.getElementById("reload").addEventListener("click", requestSinks);
 	primaryEl.addEventListener("change", scheduleSave);
