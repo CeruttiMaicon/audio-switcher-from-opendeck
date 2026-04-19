@@ -9,7 +9,13 @@ import {
 } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 import { sendToPropertyInspector } from "../lib/pi-bridge.js";
-import { findSinkByConfiguredName, getDefaultSinkId, listSinks, setDefaultSink } from "../lib/wpctl.js";
+import {
+	findSinkByConfiguredName,
+	getDefaultSinkId,
+	getDefaultSinkIdFromInspect,
+	listSinks,
+	setDefaultSink,
+} from "../lib/wpctl.js";
 
 export type SinkSettings = JsonObject & {
 	primaryName?: string;
@@ -18,6 +24,10 @@ export type SinkSettings = JsonObject & {
 
 type SendToPluginHandler = NonNullable<SingletonAction<SinkSettings>["onSendToPlugin"]>;
 type SendToPluginEv = Parameters<SendToPluginHandler>[0];
+
+type SinkIdCache = { primaryId: number; secondaryId: number };
+/** Cache dos IDs resolvidos por instância da ação (evita pw-dump no keyDown). */
+const sinkIdCache = new Map<string, SinkIdCache>();
 
 /** Lê primary/secondary do payload do host (flat ou aninhado em `settings`). */
 function sinkSettingsFromInstancePayload(payload: unknown): SinkSettings {
@@ -50,6 +60,34 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 	}
 
 	override async onKeyDown(ev: KeyDownEvent<SinkSettings>): Promise<void> {
+		const cached = sinkIdCache.get(ev.action.id);
+
+		if (cached) {
+			// Caminho rápido: IDs já conhecidos, só precisa saber o default atual.
+			const defaultId = await getDefaultSinkIdFromInspect();
+			if (defaultId == null) {
+				console.error("[pipewire-sink-toggle] keyDown rápido: wpctl inspect falhou");
+				await ev.action.showAlert();
+				return;
+			}
+			let targetId: number;
+			if (defaultId === cached.primaryId) {
+				targetId = cached.secondaryId;
+			} else {
+				targetId = cached.primaryId;
+			}
+			console.log("[pipewire-sink-toggle] keyDown (cache): default=%s alvo=%s", defaultId, targetId);
+			const ok = await setDefaultSink(targetId);
+			if (!ok) {
+				await ev.action.showAlert();
+				return;
+			}
+			const newState: 0 | 1 = targetId === cached.primaryId ? 0 : 1;
+			await ev.action.setState(newState);
+			return;
+		}
+
+		// Fallback: cache não aquecido ainda, usa listSinks() completo.
 		const s = sinkSettingsFromInstancePayload(ev.payload);
 		const primaryName = s.primaryName ?? "";
 		const secondaryName = s.secondaryName ?? "";
@@ -82,6 +120,9 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 			return;
 		}
 
+		// Aquece o cache para as próximas chamadas.
+		sinkIdCache.set(ev.action.id, { primaryId: primaryHit.id, secondaryId: secondaryHit.id });
+
 		let targetId: number;
 		if (defaultId === primaryHit.id) {
 			targetId = secondaryHit.id;
@@ -98,10 +139,8 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 		}
 
 		console.log(
-			"[pipewire-sink-toggle] keyDown: default atual=%s (%s) | alvo=%s | comando wpctl set-default %s",
+			"[pipewire-sink-toggle] keyDown (fallback): default atual=%s | alvo=%s",
 			defaultId,
-			sinks.find((x) => x.id === defaultId)?.name ?? "?",
-			targetId,
 			targetId,
 		);
 
@@ -169,6 +208,15 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 			primaryName,
 			secondaryName,
 		);
+
+		// Aquece o cache dos IDs para o caminho rápido do keyDown.
+		const primaryHit = findSinkByConfiguredName(sinks, primaryName);
+		const secondaryHit = findSinkByConfiguredName(sinks, secondaryName);
+		if (primaryHit && secondaryHit) {
+			sinkIdCache.set(action.id, { primaryId: primaryHit.id, secondaryId: secondaryHit.id });
+		} else {
+			sinkIdCache.delete(action.id);
+		}
 
 		let state: 0 | 1 = 0;
 		if (defaultSink) {
