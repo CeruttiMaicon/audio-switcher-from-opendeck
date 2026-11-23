@@ -28,6 +28,8 @@ type SendToPluginEv = Parameters<SendToPluginHandler>[0];
 type SinkIdCache = { primaryId: number; secondaryId: number };
 /** Cache dos IDs resolvidos por instância da ação (evita pw-dump no keyDown). */
 const sinkIdCache = new Map<string, SinkIdCache>();
+/** Último estado visual aplicado — evita setState → didReceiveSettings em loop. */
+const lastToggleState = new Map<string, 0 | 1>();
 
 /** Lê primary/secondary do payload do host (flat ou aninhado em `settings`). */
 function sinkSettingsFromInstancePayload(payload: unknown): SinkSettings {
@@ -67,6 +69,7 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 			const defaultId = await getDefaultSinkIdFromInspect();
 			if (defaultId == null) {
 				console.error("[pipewire-sink-toggle] keyDown rápido: wpctl inspect falhou");
+				sinkIdCache.delete(ev.action.id);
 				await ev.action.showAlert();
 				return;
 			}
@@ -79,11 +82,24 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 			console.log("[pipewire-sink-toggle] keyDown (cache): default=%s alvo=%s", defaultId, targetId);
 			const ok = await setDefaultSink(targetId);
 			if (!ok) {
+				console.error("[pipewire-sink-toggle] set-default falhou com IDs em cache — a invalidar");
+				sinkIdCache.delete(ev.action.id);
+				await ev.action.showAlert();
+				return;
+			}
+			const verified = await getDefaultSinkIdFromInspect();
+			if (verified !== targetId) {
+				console.error(
+					"[pipewire-sink-toggle] após set-default, default=%s (esperado %s) — cache obsoleto?",
+					verified,
+					targetId,
+				);
+				sinkIdCache.delete(ev.action.id);
 				await ev.action.showAlert();
 				return;
 			}
 			const newState: 0 | 1 = targetId === cached.primaryId ? 0 : 1;
-			await ev.action.setState(newState);
+			await this.applyToggleState(ev.action, newState);
 			return;
 		}
 
@@ -113,7 +129,7 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 			return;
 		}
 
-		const defaultId = getDefaultSinkId(sinks);
+		const defaultId = getDefaultSinkId(sinks) ?? (await getDefaultSinkIdFromInspect());
 		if (defaultId == null) {
 			console.error("[pipewire-sink-toggle] nenhum sink predefinido (*) em wpctl status");
 			await ev.action.showAlert();
@@ -146,12 +162,13 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 
 		const ok = await setDefaultSink(targetId);
 		if (!ok) {
+			sinkIdCache.delete(ev.action.id);
 			await ev.action.showAlert();
 			return;
 		}
 
 		const newState: 0 | 1 = targetId === primaryHit.id ? 0 : 1;
-		await ev.action.setState(newState);
+		await this.applyToggleState(ev.action, newState);
 	}
 
 	override async onPropertyInspectorDidAppear(
@@ -243,10 +260,20 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 		if (!action.isKey()) {
 			return;
 		}
+		await this.applyToggleState(action, state);
+	}
+
+	/** Aplica setState só quando o estado muda (evita eco didReceiveSettings no OpenDeck). */
+	private async applyToggleState(action: Action<SinkSettings>, state: 0 | 1): Promise<void> {
+		if (lastToggleState.get(action.id) === state) {
+			return;
+		}
+		lastToggleState.set(action.id, state);
 		try {
 			await action.setState(state);
 		} catch (err: unknown) {
 			console.error("[pipewire-sink-toggle] setState:", err);
+			lastToggleState.delete(action.id);
 		}
 	}
 

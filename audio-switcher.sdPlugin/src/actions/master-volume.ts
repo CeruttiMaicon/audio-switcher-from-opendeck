@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import {
 	action,
 	SingletonAction,
@@ -22,12 +23,52 @@ import {
 	toggleDefaultSinkMute,
 } from "../lib/wpctl.js";
 
+/**
+ * Fontes explícitas — `loadSystemFonts: true` (default do Resvg) varre Noto CJK etc. e
+ * pode prender o event loop a 100% CPU, impedindo keyDown do toggle de sink.
+ */
+const RESVG_FONT_CANDIDATES = [
+	"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+	"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+	"/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+	"/usr/share/fonts/TTF/DejaVuSans.ttf",
+];
+
+const resvgFontFiles = RESVG_FONT_CANDIDATES.filter((p) => existsSync(p));
+
+/** Cache PNG por chave de render (evita Resvg repetido no mesmo frame). */
+const pngDataUrlCache = new Map<string, string>();
+const PNG_CACHE_MAX = 64;
+
 /** Converte SVG string → data:image/png;base64 (exigido pelo OpenDeck). */
-function svgToPngDataUrl(svg: string, size: number): string {
+function svgToPngDataUrl(svg: string, size: number, cacheKey?: string): string {
+	if (cacheKey) {
+		const hit = pngDataUrlCache.get(cacheKey);
+		if (hit) {
+			return hit;
+		}
+	}
 	try {
-		const resvg = new Resvg(svg, { fitTo: { mode: "width", value: size } });
+		const resvg = new Resvg(svg, {
+			fitTo: { mode: "width", value: size },
+			font: {
+				loadSystemFonts: false,
+				fontFiles: resvgFontFiles,
+				defaultFontFamily: "DejaVu Sans",
+			},
+		});
 		const png = resvg.render().asPng();
-		return `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
+		const url = `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
+		if (cacheKey) {
+			if (pngDataUrlCache.size >= PNG_CACHE_MAX) {
+				const oldest = pngDataUrlCache.keys().next().value;
+				if (oldest !== undefined) {
+					pngDataUrlCache.delete(oldest);
+				}
+			}
+			pngDataUrlCache.set(cacheKey, url);
+		}
+		return url;
 	} catch (err: unknown) {
 		console.error("[pipewire-sink-toggle] svgToPngDataUrl falhou:", err);
 		return "";
@@ -36,8 +77,9 @@ function svgToPngDataUrl(svg: string, size: number): string {
 
 /** Face do layout do encoder (200x100), mesmo desenho do preview (anel + % + altifalante). */
 function dialFaceDataUrl(pct: number, muted: boolean, unknown: boolean, lite: boolean): string {
+	const cacheKey = `dial:${pct}:${muted ? 1 : 0}:${unknown ? 1 : 0}:${lite ? 1 : 0}`;
 	const svg = buildMasterVolumeSvg({ percent: pct, muted, unknown, size: 200, height: 100, renderLite: lite });
-	return svgToPngDataUrl(svg, 200);
+	return svgToPngDataUrl(svg, 200, cacheKey);
 }
 
 export type MasterVolumeSettings = JsonObject & {
@@ -143,32 +185,34 @@ async function paintMasterVolumeMeter(
 
 	lastHostFingerprint.set(action.id, fingerprint);
 
-	// Sempre gera o PNG e envia via setImage (funciona para key E encoder no OpenDeck)
-	const svgStr = buildMasterVolumeSvg({
-		percent: pct,
-		muted,
-		unknown,
-		size: 144,
-		renderLite: false,
-	});
-	const pngDataUrl = svgToPngDataUrl(svgStr, 144);
-	if (pngDataUrl) {
-		try {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			await (action as any).setImage(pngDataUrl);
-		} catch (err: unknown) {
-			console.error("[pipewire-sink-toggle] master-volume setImage:", err);
-		}
-	}
-
-	if (action.isKey()) {
-		return;
-	}
+	// Encoder: só o pixmap do layout (evita setImage+setFeedback a duplicar Resvg e a
+	// realimentar didReceiveSettings no OpenDeck).
 	if (action.isDial()) {
 		try {
 			await action.setFeedback({ face: dialFaceDataUrl(pct, muted, unknown, false) });
 		} catch (err: unknown) {
 			console.error("[pipewire-sink-toggle] master-volume dial paint:", err);
+		}
+		return;
+	}
+
+	if (action.isKey()) {
+		const cacheKey = `key:${pct}:${muted ? 1 : 0}:${unknown ? 1 : 0}`;
+		const svgStr = buildMasterVolumeSvg({
+			percent: pct,
+			muted,
+			unknown,
+			size: 144,
+			renderLite: false,
+		});
+		const pngDataUrl = svgToPngDataUrl(svgStr, 144, cacheKey);
+		if (pngDataUrl) {
+			try {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				await (action as any).setImage(pngDataUrl);
+			} catch (err: unknown) {
+				console.error("[pipewire-sink-toggle] master-volume setImage:", err);
+			}
 		}
 		return;
 	}
@@ -353,10 +397,10 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 
 	override async onWillAppear(ev: WillAppearEvent<MasterVolumeSettings>): Promise<void> {
 		const ctx = ev.action.id;
-		const s0 = await ev.action.getSettings<MasterVolumeSettings>();
-		MasterVolumeAction.bumpDialStepCache(ctx, clampVolumeStep(s0.volumeStepPercent));
-
-		const merged: MasterVolumeSettings = { ...masterVolumeSettingsFromPayload(ev.payload), ...s0 };
+		// Preferir settings do payload — getSettings() reenvia didReceiveSettings e
+		// com várias instâncias (perfis) isso enfileira trabalho à toa no arranque.
+		const merged = masterVolumeSettingsFromPayload(ev.payload);
+		MasterVolumeAction.bumpDialStepCache(ctx, clampVolumeStep(merged.volumeStepPercent));
 		lastHostFingerprint.delete(ctx);
 
 		if (ev.action.isDial()) {
@@ -376,14 +420,7 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 			await paintMasterVolumeMeter(ev.action, merged, { pct: 0, muted: false, unknown: true });
 		}
 
-		if (ev.action.isDial()) {
-			const step = clampVolumeStep(s0.volumeStepPercent);
-			await ev.action.setTriggerDescription({
-				rotate: `Volume: ±${step}% per detent`,
-				push: "Toggle mute",
-				touch: "Default output volume",
-			});
-		}
+		// setTriggerDescription não é suportado pelo OpenDeck (evento desconhecido → timeout).
 	}
 
 	override async onWillDisappear(ev: WillDisappearEvent<MasterVolumeSettings>): Promise<void> {
@@ -391,20 +428,19 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 	}
 
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<MasterVolumeSettings>): Promise<void> {
-		const s = masterVolumeSettingsFromPayload(ev.payload);
-		const stored = await ev.action.getSettings<MasterVolumeSettings>();
-		const merged = { ...stored, ...s };
-		MasterVolumeAction.bumpDialStepCache(ev.action.id, clampVolumeStep(merged.volumeStepPercent));
+		// NÃO chamar action.getSettings() aqui: no protocolo SD isso emite outro
+		// didReceiveSettings → loop infinito de WebSocket (100% CPU) e o toggle para.
+		const merged = masterVolumeSettingsFromPayload(ev.payload);
+		const step = clampVolumeStep(merged.volumeStepPercent);
+		const prevStep = dialCachedStep.get(ev.action.id);
+		MasterVolumeAction.bumpDialStepCache(ev.action.id, step);
+
+		if (prevStep === step) {
+			return;
+		}
+
 		lastHostFingerprint.delete(ev.action.id);
 		await this.paintFromShadow(ev.action, merged);
-		if (ev.action.isDial()) {
-			const step = clampVolumeStep(merged.volumeStepPercent);
-			await ev.action.setTriggerDescription({
-				rotate: `Volume: ±${step}% per detent`,
-				push: "Toggle mute",
-				touch: "Default output volume",
-			});
-		}
 	}
 
 	override async onDialRotate(ev: DialRotateEvent<MasterVolumeSettings>): Promise<void> {
@@ -478,14 +514,6 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 			MasterVolumeAction.bumpDialStepCache(ev.action.id, next.volumeStepPercent ?? 5);
 			lastHostFingerprint.delete(ev.action.id);
 			await this.paintFromShadow(ev.action, next);
-			if (ev.action.isDial()) {
-				const step = clampVolumeStep(next.volumeStepPercent);
-				await ev.action.setTriggerDescription({
-					rotate: `Volume: ±${step}% per detent`,
-					push: "Toggle mute",
-					touch: "Default output volume",
-				});
-			}
 		}
 	}
 }
