@@ -34,6 +34,12 @@ function svgToPngDataUrl(svg: string, size: number): string {
 	}
 }
 
+/** Face do layout do encoder (200x100), mesmo desenho do preview (anel + % + altifalante). */
+function dialFaceDataUrl(pct: number, muted: boolean, unknown: boolean, lite: boolean): string {
+	const svg = buildMasterVolumeSvg({ percent: pct, muted, unknown, size: 200, height: 100, renderLite: lite });
+	return svgToPngDataUrl(svg, 200);
+}
+
 export type MasterVolumeSettings = JsonObject & {
 	volumeStepPercent?: number;
 };
@@ -115,7 +121,6 @@ async function paintMasterVolumeMeter(
 	}
 
 	const label = masterVolumePercentLabel(unknown, muted, pct);
-	const pctColor = unknown ? "#a1a1aa" : muted ? "#fdba74" : "#f8fafc";
 
 	if (action.isDial() && paintOpts?.dialHot) {
 		const fpHot = `dH:${pct}:${muted ? 1 : 0}:${unknown ? 1 : 0}`;
@@ -124,12 +129,7 @@ async function paintMasterVolumeMeter(
 		}
 		lastHostFingerprint.set(action.id, fpHot);
 		try {
-			await Promise.all([
-				action.setTitle(label),
-				action.setFeedback({
-					pct: { value: label, color: pctColor },
-				}),
-			]);
+			await action.setFeedback({ face: dialFaceDataUrl(pct, muted, unknown, true) });
 		} catch (err: unknown) {
 			console.error("[pipewire-sink-toggle] master-volume dial hot paint:", err);
 		}
@@ -169,9 +169,7 @@ async function paintMasterVolumeMeter(
 		try {
 			await Promise.all([
 				action.setTitle(label),
-				action.setFeedback({
-					pct: { value: label, color: pctColor },
-				}),
+				action.setFeedback({ face: dialFaceDataUrl(pct, muted, unknown, false) }),
 			]);
 		} catch (err: unknown) {
 			console.error("[pipewire-sink-toggle] master-volume dial paint:", err);
