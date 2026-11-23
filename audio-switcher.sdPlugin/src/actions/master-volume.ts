@@ -12,7 +12,7 @@ import {
 } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 import { Resvg } from "@resvg/resvg-js";
-import { buildMasterVolumeSvg, masterVolumePercentLabel } from "../lib/master-volume-svg.js";
+import { buildMasterVolumeSvg } from "../lib/master-volume-svg.js";
 import { sendToPropertyInspector } from "../lib/pi-bridge.js";
 import {
 	adjustDefaultSinkVolumePercent,
@@ -120,7 +120,6 @@ async function paintMasterVolumeMeter(
 		}
 	}
 
-	const label = masterVolumePercentLabel(unknown, muted, pct);
 
 	if (action.isDial() && paintOpts?.dialHot) {
 		const fpHot = `dH:${pct}:${muted ? 1 : 0}:${unknown ? 1 : 0}`;
@@ -167,10 +166,7 @@ async function paintMasterVolumeMeter(
 	}
 	if (action.isDial()) {
 		try {
-			await Promise.all([
-				action.setTitle(label),
-				action.setFeedback({ face: dialFaceDataUrl(pct, muted, unknown, false) }),
-			]);
+			await action.setFeedback({ face: dialFaceDataUrl(pct, muted, unknown, false) });
 		} catch (err: unknown) {
 			console.error("[pipewire-sink-toggle] master-volume dial paint:", err);
 		}
