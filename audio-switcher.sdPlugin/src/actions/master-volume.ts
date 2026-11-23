@@ -359,6 +359,12 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 		const merged: MasterVolumeSettings = { ...masterVolumeSettingsFromPayload(ev.payload), ...s0 };
 		lastHostFingerprint.delete(ctx);
 
+		if (ev.action.isDial()) {
+			// Limpa estado antigo guardado pelo host (título e layout de versões anteriores) que duplicava o texto.
+			await ev.action.setTitle("").catch(() => undefined);
+			await ev.action.setFeedbackLayout("layouts/master-volume-encoder.json").catch(() => undefined);
+		}
+
 		const vol = await getDefaultSinkVolume();
 		if (vol) {
 			const pct = Math.round(vol.fraction * 100);
