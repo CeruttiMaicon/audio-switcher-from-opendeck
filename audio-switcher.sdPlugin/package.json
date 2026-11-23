@@ -1,6 +1,6 @@
 {
 	"name": "com.maicondev.opendeck.pipewire-sink-toggle.sdplugin",
-	"version": "1.4.0",
+	"version": "1.4.5",
 	"private": true,
 	"description": "OpenDeck: PipeWire audio sink toggle and master volume (wpctl)",
 	"type": "module",
