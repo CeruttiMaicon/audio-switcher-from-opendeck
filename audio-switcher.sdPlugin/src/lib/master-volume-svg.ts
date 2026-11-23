@@ -180,15 +180,15 @@ function svgWideFace(
 	const gap = c - dash;
 	const id = uniqueSuffix(w, h, pct, muted, unknown, omitText, lite);
 	const accent = unknown ? "#52525b" : muted ? "#fb923c" : lite ? "#38bdf8" : `url(#mvGrad_${id})`;
-	const mainSize = S * (unknown ? 0.28 : 0.33);
+	const mainSize = S * (unknown ? 0.22 : 0.25);
 	const subSize = S * 0.12;
 	const centerLabel = unknown ? "—" : `${pct}%`;
 
 	const k = S / 144;
 	const spFill = volumeSpeakerFill(unknown, muted);
-	const sc = 0.06 * k;
-	const pctY = -0.11 * S;
-	const iconY = 0.09 * S;
+	const sc = 0.055 * k;
+	const pctY = -0.12 * S;
+	const iconY = 0.17 * S;
 	const iconT = `translate(0,${iconY}) translate(${-256 * sc},${-256 * sc}) scale(${sc})`;
 	const textBlock: string[] = [];
 	if (!omitText) {
