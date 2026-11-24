@@ -9,6 +9,7 @@ import {
 } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 import { sendToPropertyInspector } from "../lib/pi-bridge.js";
+import { MasterVolumeAction } from "./master-volume.js";
 import {
 	findSinkByConfiguredName,
 	getDefaultSinkId,
@@ -100,6 +101,7 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 			}
 			const newState: 0 | 1 = targetId === cached.primaryId ? 0 : 1;
 			await this.applyToggleState(ev.action, newState);
+			await MasterVolumeAction.resyncAfterDefaultSinkChange(targetId);
 			return;
 		}
 
@@ -169,6 +171,7 @@ export class SinkToggleAction extends SingletonAction<SinkSettings> {
 
 		const newState: 0 | 1 = targetId === primaryHit.id ? 0 : 1;
 		await this.applyToggleState(ev.action, newState);
+		await MasterVolumeAction.resyncAfterDefaultSinkChange(targetId);
 	}
 
 	override async onPropertyInspectorDidAppear(

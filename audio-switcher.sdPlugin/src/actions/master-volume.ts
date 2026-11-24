@@ -17,6 +17,7 @@ import { buildMasterVolumeSvg } from "../lib/master-volume-svg.js";
 import { sendToPropertyInspector } from "../lib/pi-bridge.js";
 import {
 	adjustDefaultSinkVolumePercent,
+	getDefaultSinkIdFromInspect,
 	getDefaultSinkVolume,
 	invalidateDefaultSinkVolumeCache,
 	setDefaultSinkVolumePercentAbsolute,
@@ -120,6 +121,17 @@ const dialCachedStep = new Map<string, number>();
 const lastDialAction = new Map<string, Action<MasterVolumeSettings>>();
 const dialWpctlApplying = new Set<string>();
 const dialWpctlDirty = new Set<string>();
+
+/** Instâncias visíveis (key ou dial) — para ressincronizar quando o sink predefinido muda. */
+const visibleActions = new Map<string, Action<MasterVolumeSettings>>();
+
+/** Último sink predefinido conhecido; quando muda, o volume do novo sink é relido. */
+let lastKnownDefaultSinkId: number | null = null;
+/** Poll leve (`wpctl inspect`) para apanhar trocas feitas fora do plugin. */
+const DEFAULT_SINK_POLL_MS = 1500;
+let defaultSinkPollTimer: ReturnType<typeof setInterval> | null = null;
+let defaultSinkPollBusy = false;
+let resyncInFlight: Promise<void> | null = null;
 
 type VolumePaintHint = {
 	pct: number;
@@ -344,6 +356,108 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 		return true;
 	}
 
+	/**
+	 * Relê o volume do sink predefinido atual e repinta todas as instâncias visíveis.
+	 * Chamado após troca de dispositivo (pelo toggle do plugin ou detetada pelo poll).
+	 */
+	static resyncAfterDefaultSinkChange(newDefaultId?: number | null): Promise<void> {
+		if (newDefaultId !== undefined) {
+			lastKnownDefaultSinkId = newDefaultId;
+		}
+		if (resyncInFlight) {
+			// Encadeia para garantir uma leitura posterior à troca mais recente.
+			resyncInFlight = resyncInFlight.then(() => MasterVolumeAction.doResync());
+		} else {
+			resyncInFlight = MasterVolumeAction.doResync();
+		}
+		const current = resyncInFlight;
+		return current.finally(() => {
+			if (resyncInFlight === current) {
+				resyncInFlight = null;
+			}
+		});
+	}
+
+	private static async doResync(): Promise<void> {
+		if (visibleActions.size === 0) {
+			return;
+		}
+		// Descarta rotações pendentes do dial: o shadow era do sink antigo e não deve
+		// ser aplicado ao novo dispositivo.
+		for (const id of visibleActions.keys()) {
+			dialWpctlDirty.delete(id);
+			const t = MasterVolumeAction.dialFullRepaintIdleTimers.get(id);
+			if (t) {
+				clearTimeout(t);
+				MasterVolumeAction.dialFullRepaintIdleTimers.delete(id);
+			}
+		}
+		invalidateDefaultSinkVolumeCache();
+		const vol = await getDefaultSinkVolume();
+		for (const [id, action] of visibleActions) {
+			lastHostFingerprint.delete(id);
+			try {
+				if (vol) {
+					const pct = Math.round(vol.fraction * 100);
+					shadowLiveVolume.set(id, { pct, muted: vol.muted });
+					await paintMasterVolumeMeter(action, {}, { pct, muted: vol.muted, unknown: false }, { dialHot: false });
+				} else {
+					shadowLiveVolume.delete(id);
+					await paintMasterVolumeMeter(action, {}, { pct: 0, muted: false, unknown: true }, { dialHot: false });
+				}
+			} catch (err: unknown) {
+				console.error("[pipewire-sink-toggle] master-volume resync paint:", err);
+			}
+		}
+		console.log(
+			"[pipewire-sink-toggle] master-volume: sink predefinido mudou (id=%s) — volume relido: %s",
+			lastKnownDefaultSinkId ?? "?",
+			vol ? `${Math.round(vol.fraction * 100)}%${vol.muted ? " (mute)" : ""}` : "desconhecido",
+		);
+	}
+
+	private static async pollDefaultSink(): Promise<void> {
+		if (defaultSinkPollBusy || visibleActions.size === 0) {
+			return;
+		}
+		defaultSinkPollBusy = true;
+		try {
+			const id = await getDefaultSinkIdFromInspect();
+			if (id == null) {
+				return;
+			}
+			if (lastKnownDefaultSinkId == null) {
+				lastKnownDefaultSinkId = id;
+				return;
+			}
+			if (id !== lastKnownDefaultSinkId) {
+				await MasterVolumeAction.resyncAfterDefaultSinkChange(id);
+			}
+		} catch (err: unknown) {
+			console.error("[pipewire-sink-toggle] master-volume poll default sink:", err);
+		} finally {
+			defaultSinkPollBusy = false;
+		}
+	}
+
+	private static startDefaultSinkPoll(): void {
+		if (defaultSinkPollTimer) {
+			return;
+		}
+		defaultSinkPollTimer = setInterval(() => {
+			void MasterVolumeAction.pollDefaultSink();
+		}, DEFAULT_SINK_POLL_MS);
+	}
+
+	private static stopDefaultSinkPollIfIdle(): void {
+		if (visibleActions.size > 0 || !defaultSinkPollTimer) {
+			return;
+		}
+		clearInterval(defaultSinkPollTimer);
+		defaultSinkPollTimer = null;
+		lastKnownDefaultSinkId = null;
+	}
+
 	private unregisterSlot(contextId: string): void {
 		const idleFull = MasterVolumeAction.dialFullRepaintIdleTimers.get(contextId);
 		if (idleFull) {
@@ -356,6 +470,8 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 		lastDialAction.delete(contextId);
 		dialWpctlApplying.delete(contextId);
 		dialWpctlDirty.delete(contextId);
+		visibleActions.delete(contextId);
+		MasterVolumeAction.stopDefaultSinkPollIfIdle();
 	}
 
 	/** Repinta a partir do `shadow` (sem `get-volume`). */
@@ -402,6 +518,15 @@ export class MasterVolumeAction extends SingletonAction<MasterVolumeSettings> {
 		const merged = masterVolumeSettingsFromPayload(ev.payload);
 		MasterVolumeAction.bumpDialStepCache(ctx, clampVolumeStep(merged.volumeStepPercent));
 		lastHostFingerprint.delete(ctx);
+		visibleActions.set(ctx, ev.action);
+		MasterVolumeAction.startDefaultSinkPoll();
+		if (lastKnownDefaultSinkId == null) {
+			void getDefaultSinkIdFromInspect().then((id) => {
+				if (id != null && lastKnownDefaultSinkId == null) {
+					lastKnownDefaultSinkId = id;
+				}
+			});
+		}
 
 		if (ev.action.isDial()) {
 			// Limpa estado antigo guardado pelo host (título e layout de versões anteriores) que duplicava o texto.
